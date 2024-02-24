@@ -1,0 +1,36 @@
+{
+    "manifest_version": 3,
+    "name": "Track Your Zetamac",
+    "version": "1.0",
+    "permissions": [
+      "storage",
+      "identity"
+    ],
+    "host_permissions": [
+      "https://www.googleapis.com/"
+    ],
+    "background": {
+      "service_worker": "background.js"
+    },
+    "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/icon.jpg"
+    },
+     "content_scripts": [
+    {
+      "matches": ["https://arithmetic.zetamac.com/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "oauth2": {
+    "client_id": "890605841882-qaioc9t1jvu2gho7tpfk713mg7562afk.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/spreadsheets"
+    ]
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' https://cdn.jsdelivr.net; object-src 'self'"
+  }
+}
+}
