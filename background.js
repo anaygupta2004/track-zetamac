@@ -1,7 +1,7 @@
 chrome.runtime.onInstalled.addListener(function(details) {
   if (details.reason === "install") {
     chrome.identity.getAuthToken({ 'interactive': true }, function(token) {
-      // Create a new spreadsheet with a named sheet
+
       fetch('https://sheets.googleapis.com/v4/spreadsheets', {
         method: 'POST',
         headers: {
@@ -108,7 +108,7 @@ async function appendScoreWithID(score) {
     }
 
     const spreadsheetId = await getSpreadsheetId();
-    const sheetName = await getSheetIdFromCurrentUrl(); 
+    const sheetName = await getSheetIdFromCurrentUrl();
     const range = `${sheetName}!A:A`; 
 
     fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`, {
@@ -154,10 +154,58 @@ async function getSheetIdFromCurrentUrl() {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0] && tabs[0].url) {
         const url = new URL(tabs[0].url);
+        console.log("url")
         const key = url.searchParams.get('key');
         resolve(key); // Resolves with the key or null if not found
       } else {
         resolve(null); // No active tab or URL found
+      }
+    });
+  });
+}
+
+function storeScore(newScore) {
+  chrome.storage.local.get(['scores'], function(result) {
+    let scores = result.scores || [];
+    if (!scores.includes(newScore)) {
+      scores.push(newScore);
+      console.log(newScore);
+      console.log("before append");
+      appendScoreWithID(newScore)
+        .then(() => {
+          console.log("after append");
+          chrome.storage.local.set({ scores: scores }, function() {
+            console.log('Score has been stored successfully.');
+          });
+        })
+        .catch((error) => {
+          console.error('Error appending score:', error);
+        });
+    }
+  });
+}
+
+chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+  if (request.action === "storeScore") {
+    try {
+      // Since storeScore is async, we call it with await
+      await storeScore(request.score);
+      sendResponse({status: "Score stored successfully"});
+    } catch (error) {
+      console.error('Error storing score:', error);
+      sendResponse({status: "Error storing score", error: error.toString()});
+    }
+    return true; // Indicates that you will respond asynchronously
+  }
+});
+
+function getSpreadsheetId() {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(['spreadsheetId'], (result) => {
+      if (result.spreadsheetId) {
+        resolve(result.spreadsheetId);
+      } else {
+        reject('Spreadsheet ID not found.');
       }
     });
   });
