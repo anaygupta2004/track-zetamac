@@ -82,6 +82,7 @@ chrome.runtime.onInstalled.addListener(function(details) {
         console.error('Error setting column names:', error);
       });
     });
+    addSheetIdToStorage("a7220a92");
   }
 });
 
@@ -109,60 +110,37 @@ async function appendScoreWithID(score) {
 
     const spreadsheetId = await getSpreadsheetId();
     const sheetName = await getSheetIdFromCurrentUrl();
-    const range = `${sheetName}!A:A`; 
 
-    fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-    .then(response => response.json())
-    .then(data => {
-      const numRows = data.values ? data.values.length : 0;
-      const firstEmptyRow = numRows + 1; // Sheets rows are 1-indexed
-      // Constructing the range for the first empty row
-      const fillRange = `${sheetName}!A${firstEmptyRow}:B${firstEmptyRow}`;
-
-      // Preparing data to append: date and score
-      const now = new Date();
-      const dateString = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
-      const values = [[dateString, score]];
-
-      // Appending the score to the first empty row
-      fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${fillRange}:append?valueInputOption=USER_ENTERED`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          values: values,
-          range: fillRange,
-          majorDimension: "ROWS"
-        }),
-      })
-      .then(response => response.json())
-      .then(data => console.log('Score appended:', data))
-      .catch(error => console.error('Error appending score:', error));
-    })
-    .catch(error => console.error('Error finding first empty row:', error));
-  });
-}
-
-async function getSheetIdFromCurrentUrl() {
-  return new Promise((resolve) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0] && tabs[0].url) {
-        const url = new URL(tabs[0].url);
-        console.log("url")
-        const key = url.searchParams.get('key');
-        resolve(key); // Resolves with the key or null if not found
+    checkIfSheetIdExists(sheetName, function(exists) {
+      if (!exists) {
+        console.log("The sheetId exists in storage.");
+        addNewSheetAndUpdateColumns(spreadsheetId, sheetName, token, score);
+        addSheetIdToStorage(sheetName);
       } else {
-        resolve(null); // No active tab or URL found
+        appendScoreToSheet(spreadsheetId, sheetName, score, token);
       }
     });
   });
 }
+
+function getSheetIdFromCurrentUrl() {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.query({active: true, currentWindow: true}, tabs => {
+      if (tabs.length === 0) {
+        reject('No active tab found');
+        return;
+      }
+      const url = new URL(tabs[0].url);
+      const key = url.searchParams.get('key');
+      if (key) {
+        resolve(key);
+      } else {
+        reject('Key parameter not found in URL');
+      }
+    });
+  });
+}
+
 
 function storeScore(newScore) {
   chrome.storage.local.get(['scores'], function(result) {
@@ -209,4 +187,169 @@ function getSpreadsheetId() {
       }
     });
   });
+}
+
+async function addNewSheetAndUpdateColumns(spreadsheetId, sheetName, accessToken, score) {
+  // First, add the new sheet
+  let url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+  let requestBody = {
+      requests: [
+          {
+              addSheet: {
+                  properties: {
+                      title: sheetName,
+                  }
+              }
+          }
+      ]
+  };
+
+  let response = await fetch(url, {
+      method: 'POST',
+      headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+      throw new Error('Failed to add new sheet');
+  }
+
+  const addSheetResponse = await response.json();
+  console.log('Added new sheet:', addSheetResponse);
+
+  // Update the first row with column names "Date" and "Score"
+  url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!A1:B1?valueInputOption=USER_ENTERED`;
+  requestBody = {
+      range: `${sheetName}!A1:B1`,
+      values: [
+          ["date", "score"] // Set the first row's values
+      ],
+      majorDimension: "ROWS"
+  };
+
+  response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+      throw new Error('Failed to update column names');
+  }
+
+  const updateColumnsResponse = await response.json();
+  console.log('Updated column names:', updateColumnsResponse);
+
+  // Append the current date and score to the next row
+  const now = new Date();
+  const dateString = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+  const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!A2:B2:append?valueInputOption=USER_ENTERED`;
+  const appendRequestBody = {
+      range: `${sheetName}!A2:B2`,
+      values: [
+          [dateString, score.toString()] // Append the date and score
+      ],
+      majorDimension: "ROWS"
+  };
+
+  response = await fetch(appendUrl, {
+      method: 'POST',
+      headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(appendRequestBody)
+  });
+
+  if (!response.ok) {
+      throw new Error('Failed to append date and score');
+  }
+
+  const appendResponse = await response.json();
+  console.log('Date and score appended:', appendResponse);
+
+  return {
+      addSheetResponse,
+      updateColumnsResponse,
+      appendResponse
+  };
+}
+
+
+function checkIfSheetIdExists(sheetIdToCheck, callback) {
+  chrome.storage.local.get(['sheetIdList'], function(result) {
+    let sheetIdList = result.sheetIdList || [];
+    // Check if the sheetId exists in the retrieved list
+    const exists = sheetIdList.includes(sheetIdToCheck);
+    console.log(`Sheet ID exists: ${exists}`);
+    // Optionally, use a callback to return the result
+    if (typeof callback === 'function') {
+      callback(exists);
+    }
+  });
+}
+
+function addSheetIdToStorage(newSheetId) {
+  // Use chrome.storage.local or chrome.storage.sync based on your needs
+  chrome.storage.local.get(['sheetIdList'], function(result) {
+    let sheetIdList = result.sheetIdList || [];
+    if (!sheetIdList.includes(newSheetId)) {
+      sheetIdList.push(newSheetId);
+      
+      // Save the updated list back to storage
+      chrome.storage.local.set({sheetIdList: sheetIdList}, function() {
+        console.log('Sheet ID list updated:', sheetIdList);
+      });
+    }
+  });
+}
+
+
+async function appendScoreToSheet(spreadsheetId, sheetName, score, token) {
+  // Prepare the date string for appending
+  const now = new Date();
+  const dateString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  // Define the range to append the data. Note: The actual range used will be the first empty row in this column range.
+  const range = `${sheetName}!A:B`; // This specifies to append data in columns A and B of the specified sheet.
+
+  // URL for the Google Sheets API append operation
+  const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+
+  // Prepare the request body with the data to append
+  const requestBody = {
+    values: [
+      [dateString, score] // The data to append
+    ],
+    // The range is specified here for completeness in the request body, but it's primarily determined by the URL.
+    range: range,
+    majorDimension: "ROWS"
+  };
+
+  // Execute the fetch request to append the data
+  try {
+    const response = await fetch(appendUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Failed to append data: ${data.error ? data.error.message : 'Unknown error'}`);
+    }
+
+    console.log('Score appended:', data);
+  } catch (error) {
+    console.error('Error appending score:', error);
+  }
 }
