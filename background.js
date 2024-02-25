@@ -314,7 +314,7 @@ function addSheetIdToStorage(newSheetId) {
 async function appendScoreToSheet(spreadsheetId, sheetName, score, token) {
   // Prepare the date string for appending
   const now = new Date();
-  const dateString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const dateString = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
 
   // Define the range to append the data. Note: The actual range used will be the first empty row in this column range.
   const range = `${sheetName}!A:B`; // This specifies to append data in columns A and B of the specified sheet.
