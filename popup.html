@@ -1,11 +1,69 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Popup</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Score Tracker</title>
+    <link href="https://fonts.googleapis.com/css?family=Roboto:400,500&display=swap" rel="stylesheet">
     <script src="chart.umd.js"></script>
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Roboto', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #ECEFF1;
+        }
+
+        #popup-content {
+            width: 400px; /* Adjust width as needed */
+            max-width: 95%; /* Limit width to 95% of the screen size */
+            height: auto; /* Height is auto to fit content */
+            background-color: #FFF;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #scoreChart {
+            width: 100%; /* Full width of the container */
+            height: 300px; /* Set a minimum height for the chart */
+        }
+
+        #resetScores {
+            padding: 10px 20px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: background-color 0.2s;
+            margin-top: 20px;
+        }
+
+        #resetScores:hover {
+            background-color: #1976D2;
+        }
+    </style>
 </head>
 <body>
-    <canvas id="scoreChart"></canvas>
+    <div id="popup-content">
+        <div style="font-size: 24px; margin-bottom: 20px;">Daily Scores</div>
+        <canvas id="scoreChart"></canvas>
+        <button id="resetScores">Reset Scores</button>
+    </div>
     <script src="popup.js"></script>
 </body>
 </html>
